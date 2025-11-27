@@ -1,4 +1,5 @@
-﻿using Sandbox.UI;
+using System;
+using Sandbox.UI;
 
 namespace Editor;
 
@@ -25,6 +26,7 @@ public partial class TagPicker : Widget
 	public HashSet<string> ExcludedTags { get; set; } = new HashSet<string>();
 
 	private List<TagOption> TagOptions = new();
+	private List<TagGroup> OpenGroups = new();
 
 	public string Icon
 	{
@@ -74,6 +76,7 @@ public partial class TagPicker : Widget
 		var topColumns = popup.Layout.AddRow( 1 );
 
 		TagOptions.Clear();
+		OpenGroups.Clear();
 
 		foreach ( var groups in Options.GroupBy( x => x.Column ) )
 		{
@@ -97,6 +100,7 @@ public partial class TagPicker : Widget
 				if ( currentGroup == null || currentGroup.Title != entry.Group )
 				{
 					currentGroup = new TagGroup( entry.Group, MultiSelect );
+					OpenGroups.Add( currentGroup );
 					layout.Add( currentGroup );
 				}
 
@@ -157,20 +161,67 @@ public partial class TagPicker : Widget
 		var footer = popup.Layout.AddRow();
 		footer.Margin = new Margin( 0, 8, 0, 0 );
 		footer.Spacing = 4;
+
+		var filter = footer.Add( new LineEdit()
+		{
+			PlaceholderText = "Filter asset types...",
+			MinimumHeight = Theme.RowHeight,
+			MinimumWidth = 220
+		} );
+
 		footer.AddStretchCell( 1 );
 
 		if ( ShowSelectAll )
 			footer.Add( new Button( "Select All" ) { Clicked = SelectAll } );
 
 		if ( MultiSelect )
-			footer.Add( new Button.Danger( "Clear" ) { Clicked = ClearSelected } );
+			footer.Add( new Button.Danger( "Clear" )
+			{
+				Clicked = () =>
+				{
+					ClearSelected();
+					filter.Value = string.Empty;
+					ApplyFilter( string.Empty );
+					filter.Focus( true );
+				}
+			} );
 
 		footer.Add( new Button( "Close" ) { Clicked = () => popup.Close() } );
+
+		filter.TextChanged += text => ApplyFilter( text ?? string.Empty );
+		ApplyFilter( filter.Value ?? string.Empty );
+		filter.Focus( true );
 
 		popup.Visible = true;
 		popup.Position = ScreenRect.BottomRight;
 		popup.Position -= new Vector2( popup.MinimumWidth * 0.5f, popup.Height + Height );
 		popup.ConstrainToScreen();
+
+		void ApplyFilter( string text )
+		{
+			var query = text.Trim();
+
+			foreach ( var option in TagOptions )
+			{
+				bool matches =
+					string.IsNullOrEmpty( query ) ||
+					option.Option.Title.Contains( query, StringComparison.OrdinalIgnoreCase ) ||
+					option.Option.Tag.Contains( query, StringComparison.OrdinalIgnoreCase ) ||
+					(option.Option.Subtitle?.Contains( query, StringComparison.OrdinalIgnoreCase ) ?? false);
+
+				option.Hidden = !matches;
+			}
+
+			foreach ( var group in OpenGroups )
+			{
+				var hasVisible = group.Children.OfType<TagOption>().Any( x => !x.Hidden );
+				group.Hidden = !hasVisible;
+				group.Visible = hasVisible;
+			}
+
+			popup?.AdjustSize();
+			popup?.Update();
+		}
 	}
 
 	void SelectAll()
@@ -201,9 +252,17 @@ public partial class TagPicker : Widget
 
 		if ( popup.IsValid() )
 		{
-			foreach ( var c in popup.Children.OfType<TagOption>() )
+			foreach ( var option in TagOptions )
 			{
-				c.IsSelected = false;
+				option.IsSelected = false;
+				option.IsExcluded = false;
+				option.Update();
+			}
+
+			foreach ( var group in OpenGroups )
+			{
+				group.ResetCheckboxVisual();
+				group.Update();
 			}
 
 			popup.Update();

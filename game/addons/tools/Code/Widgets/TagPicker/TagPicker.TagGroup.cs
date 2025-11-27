@@ -5,6 +5,7 @@ partial class TagPicker
 	class TagGroup : Widget
 	{
 		public string Title { get; private set; }
+		public Checkbox Checkbox { get; private set; }
 
 		public TagGroup( string title, bool showCheckbox ) : base( null )
 		{
@@ -14,9 +15,20 @@ partial class TagPicker
 
 			if ( showCheckbox )
 			{
-				var checkbox = Layout.Add( new Checkbox( Title ) );
-				checkbox.StateChanged = OnCheckboxStateChanged;
+				Checkbox = Layout.Add( new Checkbox( Title ) );
+				Checkbox.StateChanged = OnCheckboxStateChanged;
 			}
+		}
+
+		public void ResetCheckboxVisual()
+		{
+			if ( Checkbox == null ) return;
+
+			// Temporarily disconnect to avoid toggling options while resetting.
+			var handler = Checkbox.StateChanged;
+			Checkbox.StateChanged = null;
+			Checkbox.State = CheckState.Off;
+			Checkbox.StateChanged = handler;
 		}
 
 		private void OnCheckboxStateChanged( CheckState state )
